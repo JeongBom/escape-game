@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>심야의 정보실 — 방탈출</title>
+<style>
+  :root{
+    --board:#0B1F16;        /* PCB 기판 진초록 */
+    --board-2:#123125;
+    --panel:#0F2A1D;
+    --copper:#D08A3E;       /* 구리 트레이스 */
+    --copper-dim:#7A5327;
+    --silk:#E8EDE6;         /* 실크스크린 흰색 */
+    --silk-dim:#9AB0A2;
+    --led:#5BE879;          /* 정답 LED */
+    --err:#FF6B5E;
+    --mono:'Courier New', Courier, monospace;
+    --sans:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--board);
+    background-image:
+      radial-gradient(circle at 15% 20%, rgba(208,138,62,.05), transparent 40%),
+      radial-gradient(circle at 85% 80%, rgba(91,232,121,.04), transparent 40%);
+    color:var(--silk);
+    font-family:var(--sans);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:24px 16px 60px;
+  }
+  .frame{width:100%;max-width:720px}
+
+  /* 상단 HUD */
+  .hud{
+    display:flex;justify-content:space-between;align-items:center;
+    font-family:var(--mono);font-size:13px;color:var(--silk-dim);
+    border:1px solid var(--copper-dim);border-radius:8px;
+    padding:8px 14px;margin-bottom:18px;background:var(--panel);
+  }
+  .hud b{color:var(--copper)}
+  #timer{color:var(--led)}
+
+  /* 회로 트레이스 진행도 */
+  .trace{
+    display:flex;align-items:center;margin:0 0 26px;
+  }
+  .node{
+    width:22px;height:22px;border-radius:5px;
+    border:2px solid var(--copper-dim);
+    background:var(--board-2);
+    flex-shrink:0;
+    transition:all .4s;
+    position:relative;
+  }
+  .node.done{
+    border-color:var(--led);
+    background:var(--led);
+    box-shadow:0 0 10px rgba(91,232,121,.7);
+  }
+  .node.now{
+    border-color:var(--copper);
+    box-shadow:0 0 8px rgba(208,138,62,.6);
+  }
+  .wire{flex:1;height:2px;background:var(--copper-dim);transition:background .4s}
+  .wire.done{background:var(--led);box-shadow:0 0 6px rgba(91,232,121,.5)}
+  .door-node{
+    width:30px;height:30px;border-radius:6px;
+    border:2px solid var(--copper);
+    display:flex;align-items:center;justify-content:center;
+    font-size:15px;flex-shrink:0;background:var(--panel);
+  }
+
+  /* 카드 */
+  .card{
+    background:var(--panel);
+    border:1px solid var(--copper-dim);
+    border-radius:12px;
+    padding:30px 28px;
+    box-shadow:0 8px 30px rgba(0,0,0,.45);
+  }
+  .unit-tag{
+    display:inline-block;font-family:var(--mono);font-size:12px;
+    color:var(--board);background:var(--copper);
+    padding:3px 10px;border-radius:4px;margin-bottom:14px;
+    letter-spacing:1px;
+  }
+  h1{font-size:26px;line-height:1.4;margin-bottom:14px;letter-spacing:-.5px}
+  h2{font-size:19px;line-height:1.55;margin-bottom:18px;font-weight:600}
+  p{line-height:1.75;color:var(--silk-dim);margin-bottom:12px;font-size:15px}
+  p strong{color:var(--silk)}
+
+  pre.code{
+    font-family:var(--mono);font-size:14px;line-height:1.7;
+    background:#071710;border:1px solid var(--copper-dim);
+    border-left:3px solid var(--copper);
+    border-radius:6px;padding:14px 18px;margin:14px 0 18px;
+    color:#CFE8D6;overflow-x:auto;white-space:pre;
+  }
+
+  /* 입력 */
+  .answer-row{display:flex;gap:10px;margin-top:18px}
+  input[type=text]{
+    flex:1;font-family:var(--mono);font-size:17px;
+    background:#071710;color:var(--silk);
+    border:1px solid var(--copper-dim);border-radius:8px;
+    padding:12px 14px;outline:none;
+  }
+  input[type=text]:focus{border-color:var(--copper);box-shadow:0 0 0 2px rgba(208,138,62,.25)}
+  button{
+    font-family:var(--sans);font-size:15px;font-weight:700;
+    background:var(--copper);color:var(--board);
+    border:none;border-radius:8px;padding:12px 22px;cursor:pointer;
+    transition:transform .1s, box-shadow .2s;
+  }
+  button:hover{box-shadow:0 0 14px rgba(208,138,62,.5)}
+  button:active{transform:scale(.97)}
+  button.ghost{
+    background:transparent;color:var(--copper);
+    border:1px solid var(--copper-dim);font-weight:500;
+  }
+  button.big{width:100%;padding:15px;font-size:17px;margin-top:8px}
+
+  /* 객관식 */
+  .choices{display:grid;gap:10px;margin-top:16px}
+  .choice{
+    text-align:left;background:#071710;color:var(--silk);
+    border:1px solid var(--copper-dim);border-radius:8px;
+    padding:13px 16px;font-size:15px;font-weight:500;cursor:pointer;
+    transition:all .15s;
+  }
+  .choice:hover{border-color:var(--copper);box-shadow:none}
+  .choice .key{font-family:var(--mono);color:var(--copper);margin-right:10px}
+  .choice.wrong{border-color:var(--err);color:var(--err);animation:shake .3s}
+
+  /* 피드백 */
+  .fb{margin-top:14px;font-size:14px;min-height:22px;line-height:1.6}
+  .fb.ok{color:var(--led)}
+  .fb.no{color:var(--err)}
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+
+  /* 힌트 */
+  .hint-box{
+    margin-top:16px;font-size:14px;color:var(--silk-dim);
+    border-top:1px dashed var(--copper-dim);padding-top:14px;line-height:1.7;
+  }
+  .hint-line{margin-top:6px}
+  .hint-line b{color:var(--copper)}
+
+  /* 키 조각 배너 */
+  .fragment{
+    margin-top:18px;padding:16px;border-radius:8px;text-align:center;
+    background:rgba(91,232,121,.08);border:1px solid var(--led);
+    font-size:15px;line-height:1.7;
+  }
+  .fragment .digit{
+    font-family:var(--mono);font-size:34px;font-weight:bold;
+    color:var(--led);letter-spacing:6px;display:block;margin-top:6px;
+    text-shadow:0 0 12px rgba(91,232,121,.6);
+  }
+
+  /* 최종 도어 */
+  .keypad-display{
+    font-family:var(--mono);font-size:40px;letter-spacing:16px;
+    text-align:center;background:#071710;border:1px solid var(--copper-dim);
+    border-radius:10px;padding:18px 0 18px 16px;margin:20px 0;
+    color:var(--led);min-height:80px;
+  }
+  .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:280px;margin:0 auto}
+  .keypad button{font-family:var(--mono);font-size:20px;padding:16px 0;background:var(--board-2);color:var(--silk);border:1px solid var(--copper-dim)}
+  .keypad button:hover{border-color:var(--copper)}
+  .keypad .act{background:var(--copper);color:var(--board);font-family:var(--sans);font-size:14px}
+
+  /* 성공 화면 */
+  .escape-art{font-size:64px;text-align:center;margin:10px 0 20px}
+  .stats{
+    font-family:var(--mono);text-align:center;font-size:15px;
+    color:var(--silk-dim);margin-bottom:24px;line-height:2;
+  }
+  .stats b{color:var(--led);font-size:22px}
+
+  /* 명예의 전당 */
+  .name-row{display:flex;gap:10px;margin:18px 0 6px}
+  .board{margin:16px 0;text-align:left}
+  .board-row{
+    display:flex;align-items:center;gap:12px;padding:11px 14px;
+    border-bottom:1px solid var(--copper-dim);font-size:15px;
+  }
+  .board-row .rank{font-family:var(--mono);color:var(--copper);width:36px;font-weight:bold;text-align:center}
+  .board-row .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .board-row .tm{font-family:var(--mono);color:var(--led)}
+  .board-row.top1{background:rgba(208,138,62,.08);border-radius:8px}
+
+  .center{text-align:center}
+  .mt{margin-top:20px}
+  .memo-tip{
+    font-size:13px;color:var(--copper);margin-top:14px;
+    font-family:var(--mono);
+  }
+  @media (max-width:480px){
+    h1{font-size:22px} h2{font-size:17px}
+    .card{padding:22px 18px}
+    .keypad-display{font-size:30px;letter-spacing:10px}
+  }
+</style>
+</head>
+<body>
+<div class="frame">
+
+  <div class="hud">
+    <span>MISSION: <b>정보실 탈출</b></span>
+    <span>⏱ <span id="timer">00:00</span></span>
+  </div>
+
+  <div class="trace" id="trace" style="display:none"></div>
+
+  <div id="screen"></div>
+</div>
+
+<script>
+"use strict";
+
+/* ===== 명예의 전당 설정 =====
+   구글 앱스 스크립트 '웹 앱' 배포 URL을 아래 따옴표 안에 붙여넣으세요.
+   ※ 로봇 연구소와 기록이 섞이지 않도록, 반드시 '새 스프레드시트'로 새로 배포한 URL을 쓰세요.
+   비워 두면 명예의 전당 기능이 자동으로 숨겨지고 게임만 실행됩니다. */
+const SCOREBOARD_URL = "https://script.google.com/macros/s/AKfycbyyBxNA37S2xArk8GM1bsdLwXdIVZ8a0IZzDgucLFVI_CZgjgPh_dv4PPdptGazjF5z/exec";
+
+/* ---------- 문제 데이터 ----------
+   2022 개정 교육과정 고등학교 <정보> 5개 영역 기반 창작 문제
+   type: "input"(주관식) | "choice"(객관식)
+   answers: 허용 정답(소문자, 공백제거 기준)
+   fragment: 클리어 시 지급되는 도어 코드 조각(순서대로 4개)
+------------------------------------ */
+const QUESTIONS = [
+  {
+    unit:"데이터",
+    title:"잠긴 사물함 — 2진수 자물쇠",
+    body:`사물함에 쪽지가 붙어 있다.<br><strong>"컴퓨터는 모든 것을 0과 1로 기억하지."</strong><br>자물쇠에는 2진수가 새겨져 있다. 이 수를 <strong>10진수</strong>로 바꿔 입력하라.`,
+    code:"101011(2)",
+    type:"input", placeholder:"10진수 입력",
+    answers:["43"],
+    hints:["자리마다 2의 거듭제곱 값을 가진다. 오른쪽 끝이 2⁰=1.","1이 있는 자리만 더하면 된다: 32 + 8 + 2 + 1"]
+  },
+  {
+    unit:"데이터",
+    title:"모니터의 암호문 — 카이사르 암호",
+    body:`꺼진 모니터에 암호문이 붙어 있다.<br>"이건 <strong>카이사르 암호</strong>다. 알파벳을 <strong>3칸씩 뒤로 밀어(A→D, B→E, C→F …)</strong> 암호화했지. 아래 암호문을 <strong>원래 단어로 복호화</strong>해서 입력하라."`,
+    code:"GDWD",
+    type:"input", placeholder:"복호화한 단어 입력",
+    answers:["data"],
+    hints:["암호화가 +3칸이었으니, 복호화는 반대로 각 글자를 알파벳 3칸 앞으로 되돌리면 된다. (D→A)","G→D, D→A, W→T… 알파벳을 순서대로 적어 놓고 거꾸로 세어 보자."],
+    fragment:"8"
+  },
+  {
+    unit:"알고리즘과 프로그래밍",
+    title:"교사용 컴퓨터 — 코드 추적",
+    body:`선생님 컴퓨터가 잠겨 있다. 화면에 파이썬 코드가 떠 있고, 비밀번호는 <strong>이 코드의 출력값</strong>이라고 한다.`,
+    code:`s = 0
+for i in range(1, 6):
+    s = s + i
+print(s)`,
+    type:"input", placeholder:"출력값 입력",
+    answers:["15"],
+    hints:["range(1, 6)은 1, 2, 3, 4, 5 를 차례로 만든다. (6은 포함 안 됨)","1+2+3+4+5 = ?"]
+  },
+  {
+    unit:"알고리즘과 프로그래밍",
+    title:"금고의 수수께끼 — 이진 탐색",
+    body:`벽에 걸린 금고에 문제가 적혀 있다.<br>"1부터 100 사이의 숫자 하나를 생각했다. '크다/작다'만 알려줄 때, <strong>이진 탐색</strong>으로 어떤 수든 반드시 맞히려면 <strong>최소 몇 번</strong>의 질문이면 충분한가?"`,
+    type:"input", placeholder:"횟수 입력",
+    answers:["7"],
+    hints:["이진 탐색은 한 번 물을 때마다 남는 범위가 절반으로 줄어든다.","100 → 50 → 25 → 13 → 7 → 4 → 2 → 1. 몇 번 줄였는지 세어 보자."],
+    fragment:"1"
+  },
+  {
+    unit:"알고리즘과 프로그래밍",
+    title:"키보드 밑의 쪽지 — 문자열 슬라이싱",
+    body:`키보드 밑에서 쪽지가 나왔다. "다음 파이썬 코드의 출력 결과가 다음 문의 열쇠다."`,
+    code:`word = "INFORMATION"
+print(word[2:6])`,
+    type:"input", placeholder:"출력 결과 입력",
+    answers:["form"],
+    hints:["인덱스는 0부터 시작한다. I=0, N=1, F=2, ...","[2:6]은 2번부터 5번까지. 6번은 포함되지 않는다."]
+  },
+  {
+    unit:"피지컬 컴퓨팅",
+    title:"복도의 가로등 — 센서 선택",
+    body:`창밖 가로등이 어두워지자 저절로 켜진다. 제어 상자에 문제가 붙어 있다.<br>"이 가로등처럼 <strong>주변이 어두워지면 자동으로 켜지는 장치</strong>를 만들 때 반드시 필요한 센서는?"`,
+    type:"choice",
+    choices:["온도 센서","조도 센서","초음파 센서","가속도 센서"],
+    answerIndex:1,
+    hints:["'어두워지면'이라는 조건을 장치가 스스로 알아채야 한다.","빛의 밝기를 측정하는 센서를 찾자."]
+  },
+  {
+    unit:"알고리즘과 프로그래밍",
+    title:"뒤섞인 카드 서랍 — 선택 정렬",
+    body:`숫자 카드가 뒤섞인 서랍이 있다: <strong>[5, 2, 9, 1, 7]</strong><br>"<strong>선택 정렬</strong>은 남은 수 중 <strong>가장 작은 수</strong>를 찾아 맨 앞의 수와 교환하는 방식이다. 이 카드를 오름차순으로 선택 정렬할 때, <strong>1회전을 마친 직후</strong>의 배열은?"`,
+    type:"choice",
+    choices:["[2, 5, 9, 1, 7]","[1, 2, 9, 5, 7]","[2, 5, 1, 7, 9]","[1, 2, 5, 7, 9]"],
+    answerIndex:1,
+    hints:["1회전 = 전체에서 가장 작은 수를 찾아, 첫 번째 자리의 수와 딱 한 번 교환하는 것이다.","가장 작은 수는 1. 1과 맨 앞의 5가 자리를 서로 바꾸면 어떻게 될까?"],
+    fragment:"4"
+  },
+  {
+    unit:"인공지능",
+    title:"AI 단말기 — 학습 방식",
+    body:`구석의 AI 단말기가 질문한다.<br>"나는 <strong>정답(레이블)이 붙은 데이터</strong>로 훈련받았다. 예를 들어 '고양이'라고 표시된 사진 수천 장을 보고 고양이를 구분하게 되었지. 나의 학습 방식은 무엇인가?"`,
+    type:"input", placeholder:"○○학습",
+    answers:["지도학습","지도 학습", "지도"],
+    hints:["기계학습은 크게 지도학습 / 비지도학습 / 강화학습으로 나뉜다.","'정답을 알려주며 가르친다' = 선생님이 지도하듯 학습시킨다."]
+  },
+  {
+    unit:"인공지능",
+    title:"스팸 메일함 — 문제 유형",
+    body:`컴퓨터의 메일함이 열려 있다. 화면에 마지막 인증 질문이 떠 있다.<br>"수신한 이메일을 <strong>'스팸'과 '일반 메일' 둘 중 하나로 판별</strong>하는 것은 기계학습의 어떤 문제 유형에 해당하는가?"`,
+    type:"choice",
+    choices:["회귀","군집화","분류","강화학습"],
+    answerIndex:2,
+    hints:["결과가 정해진 몇 개의 '종류' 중 하나로 나뉜다.","숫자를 예측하면 회귀, 종류를 나누면 ○○."]
+  },
+  {
+    unit:"디지털 문화",
+    title:"마지막 관문 — 개인정보",
+    body:`문 앞 단말기가 마지막 질문을 던진다.<br>"탈출하려면 정보사회의 시민임을 증명하라. 다음 중 <strong>개인정보에 해당하지 않는 것</strong>은?"`,
+    type:"choice",
+    choices:["주민등록번호","얼굴 사진","오늘의 날씨","휴대전화 번호"],
+    answerIndex:2,
+    hints:["개인정보는 '살아 있는 개인을 알아볼 수 있는 정보'다.","특정한 '사람'과 연결되지 않는 정보를 찾자."],
+    fragment:"7"
+  }
+];
+
+/* 도어 코드는 게임 시작 시 매번 랜덤 생성됩니다 */
+let doorCode = "";
+function genFragments(){
+  doorCode = "";
+  QUESTIONS.forEach(q=>{
+    if("fragment" in q){
+      const d = String(Math.floor(Math.random()*10));
+      q.fragment = d;
+      doorCode += d;
+    }
+  });
+}
+
+/* ---------- 상태 ---------- */
+let cur = -1;              // -1: 시작화면
+let hintUsed = 0;
+let wrongCount = 0;
+let totalWrong = 0;
+let totalHints = 0;
+let startTime = null;
+let timerId = null;
+let keypadBuf = "";
+const fragments = [];
+
+const $screen = document.getElementById("screen");
+const $trace = document.getElementById("trace");
+const $timer = document.getElementById("timer");
+
+/* ---------- 타이머 ---------- */
+function startTimer(){
+  startTime = Date.now();
+  timerId = setInterval(()=>{ $timer.textContent = fmt(Date.now()-startTime); },500);
+}
+function fmt(ms){
+  const s = Math.floor(ms/1000);
+  return String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
+}
+
+/* ---------- 진행도(회로 트레이스) ---------- */
+function renderTrace(){
+  $trace.style.display = "flex";
+  let html = "";
+  for(let i=0;i<QUESTIONS.length;i++){
+    const cls = i<cur ? "done" : (i===cur ? "now" : "");
+    html += `<div class="node ${cls}" title="문제 ${i+1}"></div>`;
+    html += `<div class="wire ${i<cur?"done":""}"></div>`;
+  }
+  html += `<div class="door-node">${cur>=QUESTIONS.length?"🔓":"🔒"}</div>`;
+  $trace.innerHTML = html;
+}
+
+/* ---------- 화면 ---------- */
+function showIntro(){
+  $screen.innerHTML = `
+    <div class="card">
+      <div class="unit-tag">MISSION BRIEFING</div>
+      <h1>심야의 정보실</h1>
+      <p>방과 후, 정보실에 두고 온 USB를 가지러 왔다가 문이 잠겨 버렸다.
+      정보실의 보안 시스템이 작동을 시작했다.</p>
+      <p><strong>"탈출하고 싶다면, 이 방에 숨겨진 10개의 장치를 해제하라."</strong></p>
+      <p>일부 장치를 해제하면 <strong>도어 코드 조각(숫자)</strong>이 나온다.
+      조각을 잘 <strong>메모</strong>해 두었다가, 마지막에 4자리 코드를 입력해야 탈출할 수 있다.</p>
+      <div class="name-row">
+        <input type="text" id="pcls0" maxlength="10" placeholder="반 (예: 3)" autocomplete="off" style="flex:0 0 130px">
+        <input type="text" id="pname0" maxlength="20" placeholder="탐험가 이름 (또는 별명)" autocomplete="off">
+      </div>
+      <div class="fb" id="fb"></div>
+      <button class="big" onclick="startGame()">▶ 탈출 시작</button>
+      ${SCOREBOARD_URL ? `<button class="ghost big" onclick="showBoard(true)">🏆 명예의 전당 보기</button>` : ""}
+    </div>`;
+  const clsInp = document.getElementById("pcls0");
+  const inp = document.getElementById("pname0");
+  clsInp.focus();
+  clsInp.addEventListener("keydown", e=>{ if(e.key==="Enter") inp.focus(); });
+  inp.addEventListener("keydown", e=>{ if(e.key==="Enter") startGame(); });
+}
+
+let playerName = "";
+let playerClass = "";
+function startGame(){
+  const clsInp = document.getElementById("pcls0");
+  const nameInp = document.getElementById("pname0");
+  const cls = clsInp.value.trim();
+  const name = nameInp.value.trim();
+  const fb = document.getElementById("fb");
+  if(!cls){
+    fb.className = "fb no";
+    fb.textContent = "반을 먼저 입력하자! (예: 1-3)";
+    clsInp.focus();
+    return;
+  }
+  if(!name){
+    fb.className = "fb no";
+    fb.textContent = "이름을 먼저 입력하자!";
+    nameInp.focus();
+    return;
+  }
+  playerClass = cls;
+  playerName = name;
+  genFragments();
+  cur = 0;
+  startTimer();
+  showQuestion();
+}
+
+function showQuestion(){
+  hintUsed = 0; wrongCount = 0;
+  renderTrace();
+  const q = QUESTIONS[cur];
+  let inner = `
+    <div class="unit-tag">${q.unit} · 장치 ${cur+1} / ${QUESTIONS.length}</div>
+    <h2>${q.title}</h2>
+    <p>${q.body}</p>
+    ${q.code ? `<pre class="code">${q.code}</pre>` : ""}`;
+
+  if(q.type === "input"){
+    inner += `
+      <div class="answer-row">
+        <input type="text" id="ans" placeholder="${q.placeholder||"정답 입력"}" autocomplete="off">
+        <button onclick="checkInput()">해제</button>
+      </div>`;
+  } else {
+    inner += `<div class="choices">` + q.choices.map((c,i)=>
+      `<button class="choice" id="ch${i}" onclick="checkChoice(${i})"><span class="key">${i+1}</span>${c}</button>`
+    ).join("") + `</div>`;
+  }
+
+  inner += `
+    <div class="fb" id="fb"></div>
+    <div class="hint-box">
+      <button class="ghost" onclick="useHint()">💡 힌트 보기 (${q.hints.length}개)</button>
+      <div id="hints"></div>
+    </div>`;
+
+  $screen.innerHTML = `<div class="card">${inner}</div>`;
+
+  const inp = document.getElementById("ans");
+  if(inp){
+    inp.focus();
+    inp.addEventListener("keydown", e=>{ if(e.key==="Enter") checkInput(); });
+  }
+}
+
+function normalize(s){ return s.trim().toLowerCase().replace(/\s+/g,""); }
+
+function checkInput(){
+  const q = QUESTIONS[cur];
+  const v = normalize(document.getElementById("ans").value);
+  if(!v) return;
+  const ok = q.answers.some(a => normalize(a) === v);
+  ok ? correct() : wrong();
+}
+
+function checkChoice(i){
+  const q = QUESTIONS[cur];
+  if(i === q.answerIndex){ correct(); }
+  else{
+    const el = document.getElementById("ch"+i);
+    el.classList.add("wrong");
+    setTimeout(()=>el.classList.remove("wrong"), 400);
+    wrong();
+  }
+}
+
+function wrong(){
+  wrongCount++; totalWrong++;
+  const fb = document.getElementById("fb");
+  fb.className = "fb no";
+  fb.textContent = wrongCount >= 2
+    ? "⚠ 접근 거부. 힌트를 확인해 보자."
+    : "✖ 접근 거부. 다시 시도하라.";
+}
+
+function useHint(){
+  const q = QUESTIONS[cur];
+  if(hintUsed >= q.hints.length) return;
+  totalHints++;
+  const box = document.getElementById("hints");
+  box.innerHTML += `<div class="hint-line"><b>HINT ${hintUsed+1}</b> — ${q.hints[hintUsed]}</div>`;
+  hintUsed++;
+}
+
+function correct(){
+  const q = QUESTIONS[cur];
+  if(q.fragment) fragments.push(q.fragment);
+  let extra = "";
+  if(q.fragment){
+    extra = `
+      <div class="fragment">
+        🔑 장치가 열리며 <strong>도어 코드 조각</strong>이 나왔다! (${fragments.length}번째 조각)
+        <span class="digit">${q.fragment}</span>
+      </div>
+      <div class="memo-tip center">※ 이 숫자를 꼭 메모해 두자! 나중에 다시 볼 수 없다.</div>`;
+  }
+  $screen.innerHTML = `
+    <div class="card center">
+      <div class="unit-tag">${q.unit}</div>
+      <h2>✔ 장치 ${cur+1} 해제 완료</h2>
+      <p>보안 회로 하나에 불이 들어왔다.</p>
+      ${extra}
+      <button class="big" onclick="next()">${cur+1 < QUESTIONS.length ? "다음 장치로 →" : "🚪 문 앞으로 이동"}</button>
+    </div>`;
+  cur++;
+  renderTrace();
+}
+
+function next(){
+  if(cur < QUESTIONS.length) showQuestion();
+  else showDoor();
+}
+
+/* ---------- 최종 도어 ---------- */
+function showDoor(){
+  keypadBuf = "";
+  renderTrace();
+  $screen.innerHTML = `
+    <div class="card">
+      <div class="unit-tag">FINAL DOOR</div>
+      <h2>🚪 출입문 — 4자리 도어 코드</h2>
+      <p>모든 장치가 해제되었다. 이제 지금까지 모은 <strong>4개의 코드 조각</strong>을
+      <strong>얻은 순서대로</strong> 입력하면 문이 열린다.</p>
+      <div class="keypad-display" id="kd">— — — —</div>
+      <div class="keypad">
+        ${[1,2,3,4,5,6,7,8,9].map(n=>`<button onclick="kp('${n}')">${n}</button>`).join("")}
+        <button class="act" onclick="kpClear()">지움</button>
+        <button onclick="kp('0')">0</button>
+        <button class="act" onclick="kpEnter()">열기</button>
+      </div>
+      <div class="fb center" id="fb"></div>
+    </div>`;
+}
+
+function kp(n){
+  if(keypadBuf.length >= 4) return;
+  keypadBuf += n;
+  drawKd();
+}
+function kpClear(){ keypadBuf = ""; drawKd(); document.getElementById("fb").textContent=""; }
+function drawKd(){
+  const chars = [];
+  for(let i=0;i<4;i++) chars.push(keypadBuf[i] || "—");
+  document.getElementById("kd").textContent = chars.join(" ");
+}
+function kpEnter(){
+  const fb = document.getElementById("fb");
+  if(keypadBuf.length < 4){
+    fb.className = "fb no"; fb.textContent = "4자리를 모두 입력하라.";
+    return;
+  }
+  if(keypadBuf === doorCode){
+    clearInterval(timerId);
+    showEscape();
+  } else {
+    totalWrong++;
+    fb.className = "fb no";
+    fb.textContent = "🚨 잘못된 코드! 조각을 얻은 순서를 다시 떠올려 보자.";
+    keypadBuf = ""; drawKd();
+  }
+}
+
+/* ---------- 탈출 성공 & 명예의 전당 ---------- */
+let finalSecs = 0;
+let submitted = false;
+
+function showEscape(){
+  finalSecs = Math.floor((Date.now()-startTime)/1000);
+  const elapsed = fmt(finalSecs*1000);
+  const boardUI = SCOREBOARD_URL ? `
+      <div class="fb" id="fb"></div>
+      <button class="ghost big" id="retryBtn" style="display:none" onclick="submitScore()">다시 등록 시도</button>
+      <button class="ghost big" onclick="showBoard(false)">🏆 명예의 전당 보기</button>` : "";
+  $screen.innerHTML = `
+    <div class="card center">
+      <div class="unit-tag">MISSION CLEAR</div>
+      <div class="escape-art">🎉🔓🎉</div>
+      <h1>${esc(playerClass)} ${esc(playerName)}, 탈출 성공!</h1>
+      <p>철컥 — 문이 열리고 복도의 불빛이 쏟아진다.<br>
+      너는 데이터, 알고리즘, 피지컬 컴퓨팅, 인공지능, 디지털 문화의
+      모든 관문을 통과한 진정한 정보 시민이다.</p>
+      <div class="stats">
+        걸린 시간 <b>${elapsed}</b><br>
+        오답 횟수: ${totalWrong}회 · 사용한 힌트: ${totalHints}개
+      </div>
+      ${boardUI}
+      <button class="big" onclick="location.reload()">↺ 처음부터 다시 하기</button>
+    </div>`;
+  renderTrace();
+  if(SCOREBOARD_URL) submitScore();
+}
+
+async function submitScore(){
+  if(submitted) return;
+  const fb = document.getElementById("fb");
+  const retry = document.getElementById("retryBtn");
+  retry.style.display = "none";
+  fb.className = "fb"; fb.textContent = "명예의 전당에 기록 등록 중...";
+  try{
+    await fetch(SCOREBOARD_URL, {
+      method:"POST",
+      headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body: JSON.stringify({ name:playerName, seconds:finalSecs, cls:playerClass })
+    });
+    submitted = true;
+    fb.className = "fb ok"; fb.textContent = "✔ 기록이 명예의 전당에 등록되었다!";
+  }catch(err){
+    fb.className = "fb no"; fb.textContent = "등록 실패. 인터넷 연결을 확인하자.";
+    retry.style.display = "";
+  }
+}
+
+async function showBoard(fromIntro){
+  $screen.innerHTML = `
+    <div class="card center">
+      <div class="unit-tag">HALL OF FAME</div>
+      <h2>🏆 명예의 전당</h2>
+      <p id="bmsg">기록을 불러오는 중...</p>
+      <div class="board" id="board"></div>
+      <button class="ghost big" id="backBtn"></button>
+    </div>`;
+  const back = document.getElementById("backBtn");
+  back.textContent = fromIntro ? "← 돌아가기" : "↺ 처음부터 다시 하기";
+  back.onclick = ()=> fromIntro ? showIntro() : location.reload();
+  try{
+    const res = await fetch(SCOREBOARD_URL);
+    const data = await res.json();
+    const msg = document.getElementById("bmsg");
+    if(!data.top || data.top.length===0){
+      msg.textContent = "아직 등록된 기록이 없다. 첫 번째 탈출자가 되어 보자!";
+      return;
+    }
+    msg.textContent = "가장 빠른 탈출 기록 TOP 10";
+    document.getElementById("board").innerHTML = data.top.map((r,i)=>{
+      const medal = i<3 ? ["🥇","🥈","🥉"][i] : (i+1);
+      const cls = r.cls ? ` <span style="color:var(--silk-dim);font-size:12px">(${esc(r.cls)})</span>` : "";
+      return `<div class="board-row${i===0?" top1":""}">
+        <span class="rank">${medal}</span>
+        <span class="nm">${esc(r.name)}${cls}</span>
+        <span class="tm">${fmt(r.seconds*1000)}</span>
+      </div>`;
+    }).join("");
+  }catch(err){
+    document.getElementById("bmsg").textContent = "기록을 불러오지 못했다. 인터넷 연결과 URL 설정을 확인하자.";
+  }
+}
+function esc(s){ const d=document.createElement("div"); d.textContent=String(s); return d.innerHTML; }
+
+/* ---------- 시작 ---------- */
+showIntro();
+</script>
+</body>
+</html>

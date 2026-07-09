@@ -764,7 +764,7 @@ function showEscape(){
   renderTrace();
   if(SCOREBOARD_URL){
     const fb = document.getElementById("fb");
-    if(finalSecs < 90){
+    if(finalSecs < 60){
       fb.className = "fb no";
       fb.textContent = "🚫 부정 사용으로 시간 등록이 어렵습니다.";
     } else {

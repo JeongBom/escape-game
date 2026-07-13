@@ -299,6 +299,12 @@
 <script>
 "use strict";
 
+/* ================= 보호 영역 =================
+   게임 전체를 클로저(비공개 영역)에 가둔다.
+   콘솔에서 stageClear(), doorCode 등 내부 함수/데이터에
+   접근할 수 없고, 버튼이 쓰는 함수만 맨 아래에서 공개한다. */
+(function(){
+
 /* ===== 명예의 전당 설정 =====
    구글 앱스 스크립트 '웹 앱' 배포 URL을 아래 따옴표 안에 붙여넣으세요.
    ※ 정보실 방탈출과 기록이 섞이지 않도록, 반드시 '새 스프레드시트'로 새로 배포한 URL을 쓰세요.
@@ -1395,6 +1401,16 @@ async function showBoard(fromIntro){
 }
 
 showIntro();
+
+/* 인라인 버튼(onclick)이 쓰는 함수만 공개 — 그 외 내부 로직·데이터는 접근 불가 */
+Object.assign(window, {
+  startGame, showBoard, submitScore,
+  addCmd, removeCmd, pickSlot, clearProgram, runProgram,
+  useHint, pickDebug, fixDebug, pickCell, pickOrder, resetOrder,
+  nextStage, peekFragment, kp, kpClear, kpEnter
+});
+
+})();
 </script>
 </body>
 </html>
